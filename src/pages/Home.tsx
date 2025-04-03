@@ -1,9 +1,9 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Play, Pause, Plus, ArrowDown, RotateCcw, Timer,
-  AlertCircle, Settings as SettingsIcon
+  AlertCircle, Settings as SettingsIcon, TrendingUp, Award
 } from 'lucide-react';
 import { 
   Card, CardContent 
@@ -20,6 +20,8 @@ type TrackerData = {
   reelsLimit: number;
   timeLimit: number; // in seconds
   lastUpdated: string;
+  streakDays: number;
+  lastStreak: string;
 };
 
 const defaultData: TrackerData = {
@@ -28,6 +30,8 @@ const defaultData: TrackerData = {
   reelsLimit: 20,
   timeLimit: 1800, // 30 minutes in seconds
   lastUpdated: new Date().toISOString(),
+  streakDays: 0,
+  lastStreak: new Date().toISOString()
 };
 
 export default function Home() {
@@ -47,43 +51,59 @@ export default function Home() {
   const reelsProgress = Math.min((data.reelsWatched / data.reelsLimit) * 100, 100);
   const timeProgress = Math.min((data.timeSpent / data.timeLimit) * 100, 100);
 
-  // Effect to check daily reset
-  React.useEffect(() => {
-    const lastDate = new Date(data.lastUpdated).toDateString();
-    const today = new Date().toDateString();
+  // Check if service worker sent any updates while app was closed
+  useEffect(() => {
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'BACKGROUND_UPDATE') {
+        // Update from service worker
+        handleReelUpdate();
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
     
-    if (lastDate !== today) {
-      setData({
-        ...defaultData,
-        reelsLimit: data.reelsLimit,
-        timeLimit: data.timeLimit,
-        lastUpdated: new Date().toISOString(),
-      });
-      
-      toast({
-        title: "Daily Stats Reset",
-        description: "Your tracking stats have been reset for today.",
-      });
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+    };
+  }, []);
+
+  // Effect to check for and restore background tracking
+  useEffect(() => {
+    const wasTracking = localStorage.getItem('reels-counter-tracking') === 'true';
+    if (wasTracking && !isTracking) {
+      // Automatically restart tracking
+      startTracking();
     }
-  }, [data, toast, setData]);
+  }, [isTracking, startTracking]);
 
   // Handlers
-  const increaseReels = () => {
-    const newCount = data.reelsWatched + 1;
-    setData({
-      ...data,
-      reelsWatched: newCount,
-      lastUpdated: new Date().toISOString(),
+  const handleReelUpdate = () => {
+    setData(prev => {
+      const newReelsCount = prev.reelsWatched + 1;
+      const newTimeSpent = prev.timeSpent + 1;
+      
+      // Only show a toast notification for important milestones
+      if (newReelsCount === prev.reelsLimit || 
+          newReelsCount % 10 === 0 || 
+          newTimeSpent === prev.timeLimit) {
+        toast({
+          title: `${newReelsCount} Reels Watched!`,
+          description: `You've spent ${formatTime(newTimeSpent)} watching reels today.`,
+          variant: newReelsCount >= prev.reelsLimit ? "destructive" : "default",
+        });
+      }
+      
+      return {
+        ...prev,
+        reelsWatched: newReelsCount,
+        timeSpent: newTimeSpent,
+        lastUpdated: new Date().toISOString(),
+      };
     });
-    
-    // Show warning if limit is reached
-    if (newCount === data.reelsLimit) {
-      toast({
-        title: "Reels Limit Reached!",
-        description: `You've watched ${data.reelsLimit} reels today. Consider taking a break!`,
-        variant: "destructive",
-      });
-    }
+  };
+
+  const increaseReels = () => {
+    handleReelUpdate();
   };
 
   const toggleTracking = () => {
@@ -117,11 +137,36 @@ export default function Home() {
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <h1 className="text-3xl font-bold text-center mb-8 mt-2">Dashboard</h1>
+      <h1 className="text-3xl font-bold text-center mb-4 mt-2">Dashboard</h1>
+      
+      {/* Streak Card */}
+      <Card className="glass-card overflow-hidden border-cyan-300/30 shadow-cyan-200/10">
+        <CardContent className="p-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="bg-cyan-400/10 p-2 rounded-full mr-3">
+              <Award size={20} className="text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground">Current Streak</h3>
+              <p className="text-2xl font-bold">{data.streakDays} day{data.streakDays !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          
+          <div className="flex flex-col items-end">
+            <p className="text-xs text-muted-foreground mb-1">Today's Trend</p>
+            <div className="flex items-center text-cyan-400">
+              <TrendingUp size={14} className="mr-1" />
+              <span className="text-sm font-medium">
+                {Math.max(0, data.reelsWatched - 10)} above avg
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       
       {/* Auto-tracking notification */}
       {isTracking && (
-        <div className="bg-secondary/10 border border-secondary/30 rounded-lg p-3 mb-6 animate-pulse flex items-center">
+        <div className="bg-secondary/10 border border-secondary/30 rounded-lg p-3 mb-2 animate-pulse flex items-center">
           <AlertCircle size={18} className="text-secondary mr-2" />
           <p className="text-sm">
             <span className="font-medium">Auto-tracking active:</span> Counting reels automatically.
@@ -130,16 +175,21 @@ export default function Home() {
       )}
       
       {/* Main Counter Card */}
-      <Card className="glass-card overflow-hidden">
+      <Card className="glass-card overflow-hidden border-primary/30 shadow-lg">
+        <div className="bg-gradient-to-r from-primary/5 to-secondary/5 p-1"></div>
         <CardContent className="p-6 space-y-4">
           <div className="text-center space-y-2">
             <h2 className="text-lg font-medium text-muted-foreground">Reels Watched Today</h2>
-            <div className="text-6xl font-bold text-primary">
+            <div className="text-6xl font-bold bg-gradient-to-br from-primary to-primary/70 bg-clip-text text-transparent">
               {data.reelsWatched}
             </div>
             <Progress value={reelsProgress} className="h-2 mt-2" />
-            <p className="text-sm text-muted-foreground">
-              {data.reelsWatched} of {data.reelsLimit} reels
+            <p className="text-sm text-muted-foreground flex items-center justify-center">
+              <span className="font-medium text-primary mr-1">{data.reelsWatched}</span> of 
+              <span className="font-medium ml-1">{data.reelsLimit}</span> reels
+              {reelsProgress >= 100 && (
+                <span className="ml-2 text-destructive">Limit reached!</span>
+              )}
             </p>
           </div>
 
@@ -147,12 +197,16 @@ export default function Home() {
             <h2 className="text-lg font-medium text-muted-foreground flex items-center justify-center gap-1">
               <Timer size={16} /> Time Spent
             </h2>
-            <div className="text-4xl font-bold text-secondary">
+            <div className="text-4xl font-bold bg-gradient-to-br from-secondary to-secondary/70 bg-clip-text text-transparent">
               {formatTime(data.timeSpent)}
             </div>
             <Progress value={timeProgress} className="h-2 mt-2" />
-            <p className="text-sm text-muted-foreground">
-              {formatTime(data.timeSpent)} of {formatTime(data.timeLimit)}
+            <p className="text-sm text-muted-foreground flex items-center justify-center">
+              <span className="font-medium text-secondary mr-1">{formatTime(data.timeSpent)}</span> of
+              <span className="font-medium ml-1">{formatTime(data.timeLimit)}</span>
+              {timeProgress >= 100 && (
+                <span className="ml-2 text-destructive">Limit reached!</span>
+              )}
             </p>
           </div>
         </CardContent>
@@ -164,7 +218,7 @@ export default function Home() {
           onClick={increaseReels}
           size="lg" 
           variant="default"
-          className="reels-gradient text-white py-6"
+          className="reels-gradient text-white py-6 shadow-md"
         >
           <Plus size={20} className="mr-2" /> Add Reel
         </Button>
@@ -173,7 +227,7 @@ export default function Home() {
           onClick={toggleTracking}
           size="lg" 
           variant={isTracking ? "destructive" : "secondary"}
-          className={isTracking ? "" : "teal-gradient text-white py-6"}
+          className={isTracking ? "" : "teal-gradient text-white py-6 shadow-md"}
         >
           {isTracking ? (
             <><Pause size={20} className="mr-2" /> Stop Tracking</>
@@ -184,7 +238,7 @@ export default function Home() {
       </div>
 
       {/* Settings & Reports Links */}
-      <div className="flex justify-between mt-8">
+      <div className="flex justify-between mt-4">
         <Button
           onClick={() => navigate('/reports')}
           variant="outline"
@@ -209,6 +263,14 @@ export default function Home() {
           <RotateCcw size={18} className="mr-2" /> Reset
         </Button>
       </div>
+      
+      {/* Developer Credit */}
+      <p className="text-center text-xs text-muted-foreground pt-4">
+        Developed by Lucky Yaduvanshi<br />
+        <a href="https://miniai.online" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+          miniai.online
+        </a>
+      </p>
     </div>
   );
 }

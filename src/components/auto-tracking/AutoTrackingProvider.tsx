@@ -33,6 +33,24 @@ export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingP
   const timerRef = useRef<number | null>(null);
   const { toast } = useToast();
   
+  // Check if tracking was active in previous session
+  useEffect(() => {
+    const wasTracking = localStorage.getItem('reels-counter-tracking') === 'true';
+    const savedInterval = localStorage.getItem('reels-counter-interval');
+    
+    if (savedInterval) {
+      setCurrentInterval(parseInt(savedInterval, 10));
+    }
+    
+    if (wasTracking) {
+      // Don't auto-start on page load, but inform the user
+      toast({
+        title: "Tracking Status Restored",
+        description: "Your previous tracking session has been restored.",
+      });
+    }
+  }, [toast]);
+  
   // Handle visibility change to conserve resources
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -69,6 +87,8 @@ export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingP
     if (isTracking) return;
     
     setIsTracking(true);
+    localStorage.setItem('reels-counter-tracking', 'true');
+    
     timerRef.current = window.setInterval(() => {
       onReelDetected();
     }, currentInterval * 1000);
@@ -93,6 +113,8 @@ export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingP
     if (!isTracking) return;
     
     setIsTracking(false);
+    localStorage.setItem('reels-counter-tracking', 'false');
+    
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -115,6 +137,7 @@ export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingP
   // Set the interval time between reels
   const setReelInterval = (seconds: number) => {
     setCurrentInterval(seconds);
+    localStorage.setItem('reels-counter-interval', seconds.toString());
     
     // If already tracking, restart with new interval
     if (isTracking) {

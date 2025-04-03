@@ -22,6 +22,8 @@ import {
   BellRing,
   RotateCcw,
   ArrowLeft,
+  Award,
+  ExternalLink
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 
@@ -32,6 +34,7 @@ type SettingsData = {
   enableVibration: boolean;
   parentalControl: boolean;
   focusMode: boolean;
+  streakGoal: number;
 };
 
 const defaultSettings: SettingsData = {
@@ -41,6 +44,7 @@ const defaultSettings: SettingsData = {
   enableVibration: true,
   parentalControl: false,
   focusMode: false,
+  streakGoal: 7
 };
 
 export default function Settings() {
@@ -88,6 +92,8 @@ export default function Settings() {
     if (window.confirm("Are you sure you want to reset all app data? This cannot be undone.")) {
       localStorage.removeItem('reels-counter-data');
       localStorage.removeItem('reels-counter-settings');
+      localStorage.removeItem('reels-counter-tracking');
+      localStorage.removeItem('reels-counter-interval');
       
       toast({
         title: "All Data Reset",
@@ -153,6 +159,25 @@ export default function Settings() {
               onValueChange={(value) => setSettings({ ...settings, timeLimit: value[0] })}
               className="py-2"
             />
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label htmlFor="streakGoal">Streak Goal</Label>
+              <span className="text-sm font-medium">{settings.streakGoal} days</span>
+            </div>
+            <Slider
+              id="streakGoal"
+              min={1}
+              max={30}
+              step={1}
+              value={[settings.streakGoal]}
+              onValueChange={(value) => setSettings({ ...settings, streakGoal: value[0] })}
+              className="py-2"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Set a goal for your continuous usage streak
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -227,7 +252,7 @@ export default function Settings() {
             <div className="space-y-0.5">
               <Label htmlFor="parentalControl">Parental Controls</Label>
               <p className="text-sm text-muted-foreground">
-                Lock settings with PIN (Premium)
+                Lock settings with PIN
               </p>
             </div>
             <Switch
@@ -236,7 +261,6 @@ export default function Settings() {
               onCheckedChange={(checked) => 
                 setSettings({ ...settings, parentalControl: checked })
               }
-              disabled={true} // Premium feature
             />
           </div>
           
@@ -244,7 +268,7 @@ export default function Settings() {
             <div className="space-y-0.5">
               <Label htmlFor="focusMode">Focus Mode</Label>
               <p className="text-sm text-muted-foreground">
-                Schedule no-reels time (Premium)
+                Schedule no-reels time
               </p>
             </div>
             <Switch
@@ -253,8 +277,35 @@ export default function Settings() {
               onCheckedChange={(checked) => 
                 setSettings({ ...settings, focusMode: checked })
               }
-              disabled={true} // Premium feature
             />
+          </div>
+        </CardContent>
+      </Card>
+      
+      {/* About Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Award size={18} /> About
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-center">
+            <h3 className="text-lg font-medium">Reels Counter</h3>
+            <p className="text-sm text-muted-foreground mt-1">Version 1.0</p>
+            
+            <div className="flex flex-col items-center mt-4">
+              <p className="text-sm">Developed by</p>
+              <p className="font-medium">Lucky Yaduvanshi</p>
+              <a 
+                href="https://miniai.online" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline flex items-center mt-1 text-sm"
+              >
+                miniai.online <ExternalLink size={12} className="ml-1" />
+              </a>
+            </div>
           </div>
         </CardContent>
       </Card>
