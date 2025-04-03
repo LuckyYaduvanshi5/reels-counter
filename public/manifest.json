@@ -1,8 +1,8 @@
 
 {
-  "name": "Reels Counter",
+  "name": "Reels Counter - Track Your Social Media Usage",
   "short_name": "Reels Counter",
-  "description": "Track and limit your time spent on reels and short videos",
+  "description": "Monitor and limit your time spent on reels and short videos. Set daily limits and maintain digital wellbeing.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -22,6 +22,15 @@
       "purpose": "any maskable"
     }
   ],
+  "screenshots": [
+    {
+      "src": "/lovable-uploads/1bba0a93-769e-42c9-be4d-603a33e840e4.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Reels Counter Dashboard"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Start Tracking",
@@ -37,5 +46,8 @@
       "url": "/reports",
       "icons": [{ "src": "/lovable-uploads/a2829abc-bb9e-4d4e-9770-e8d3dd3a43fa.png", "sizes": "192x192" }]
     }
-  ]
+  ],
+  "categories": ["utilities", "productivity", "lifestyle"],
+  "lang": "en-US",
+  "prefer_related_applications": false
 }

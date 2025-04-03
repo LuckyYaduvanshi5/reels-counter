@@ -27,6 +27,7 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { ParentalControl } from '@/components/settings/ParentalControl';
 import { FocusMode } from '@/components/settings/FocusMode';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 type TrackerData = {
   reelsWatched: number;
@@ -89,11 +90,22 @@ export default function Settings() {
   const [enableVibration, setEnableVibration] = useState(true);
   const [streakGoal, setStreakGoal] = useState(7);
   
+  // State for settings dialogs
+  const [timeDialogOpen, setTimeDialogOpen] = useState(false);
+  const [reelsDialogOpen, setReelsDialogOpen] = useState(false);
+  const [streakDialogOpen, setStreakDialogOpen] = useState(false);
+  
+  // Temporary state for settings being edited
+  const [tempTimeLimit, setTempTimeLimit] = useState<number[]>([30]);
+  const [tempReelsLimit, setTempReelsLimit] = useState<number[]>([20]);
+  const [tempStreakGoal, setTempStreakGoal] = useState<number[]>([7]);
+  
   useEffect(() => {
     // Set streak goal from localStorage if available
     const goalFromStorage = localStorage.getItem('reels-counter-streak-goal');
     if (goalFromStorage) {
       setStreakGoal(parseInt(goalFromStorage, 10));
+      setTempStreakGoal([parseInt(goalFromStorage, 10)]);
     }
     
     // Load alerts settings
@@ -101,23 +113,65 @@ export default function Settings() {
     const vibrationEnabled = localStorage.getItem('reels-counter-vibration') !== 'false';
     setEnableAlerts(alertsEnabled);
     setEnableVibration(vibrationEnabled);
-  }, []);
-  
-  const handleTimeMinutesChange = (value: number[]) => {
-    // Convert minutes to seconds for storage
-    const timeInSeconds = value[0] * 60;
     
-    setData(prev => ({
-      ...prev,
-      timeLimit: timeInSeconds
-    }));
+    // Init temporary values from current data
+    if (data) {
+      setTempTimeLimit([Math.floor(data.timeLimit / 60)]);
+      setTempReelsLimit([data.reelsLimit]);
+    }
+  }, [data]);
+  
+  const saveTimeLimit = () => {
+    if (!data) return;
+    
+    // Convert minutes to seconds for storage
+    const timeInSeconds = tempTimeLimit[0] * 60;
+    
+    setData(prev => {
+      if (!prev) return defaultData;
+      return {
+        ...prev,
+        timeLimit: timeInSeconds
+      };
+    });
+    
+    toast({
+      title: "Time Limit Updated",
+      description: `Daily time limit set to ${tempTimeLimit[0]} minutes`,
+    });
+    
+    setTimeDialogOpen(false);
   };
   
-  const handleReelsLimitChange = (value: number[]) => {
-    setData(prev => ({
-      ...prev,
-      reelsLimit: value[0]
-    }));
+  const saveReelsLimit = () => {
+    if (!data) return;
+    
+    setData(prev => {
+      if (!prev) return defaultData;
+      return {
+        ...prev,
+        reelsLimit: tempReelsLimit[0]
+      };
+    });
+    
+    toast({
+      title: "Reels Limit Updated",
+      description: `Daily reels limit set to ${tempReelsLimit[0]} reels`,
+    });
+    
+    setReelsDialogOpen(false);
+  };
+  
+  const saveStreakGoal = () => {
+    setStreakGoal(tempStreakGoal[0]);
+    localStorage.setItem('reels-counter-streak-goal', tempStreakGoal[0].toString());
+    
+    toast({
+      title: "Streak Goal Updated",
+      description: `Streak goal set to ${tempStreakGoal[0]} days`,
+    });
+    
+    setStreakDialogOpen(false);
   };
   
   const handleSaveSettings = () => {
@@ -159,24 +213,30 @@ export default function Settings() {
     endTime: string;
     days: string[];
   }) => {
-    setData(prev => ({
-      ...prev,
-      focusMode: settings
-    }));
+    setData(prev => {
+      if (!prev) return defaultData;
+      return {
+        ...prev,
+        focusMode: settings
+      };
+    });
   };
   
   const handleParentalControlToggle = (enabled: boolean) => {
-    setData(prev => ({
-      ...prev,
-      parentalControl: {
-        ...prev.parentalControl || { pin: "1234" },
-        enabled
-      }
-    }));
+    setData(prev => {
+      if (!prev) return defaultData;
+      return {
+        ...prev,
+        parentalControl: {
+          ...prev.parentalControl || { pin: "1234" },
+          enabled
+        }
+      };
+    });
   };
 
   // Convert seconds to minutes for UI
-  const timeLimitInMinutes = Math.floor(data.timeLimit / 60);
+  const timeLimitInMinutes = data ? Math.floor(data.timeLimit / 60) : 30;
 
   return (
     <div className="space-y-6 animate-slide-up pb-20">
@@ -193,24 +253,30 @@ export default function Settings() {
         <div className="w-10"></div> {/* Spacer for centering */}
       </div>
       
-      {/* Simple Card Design */}
+      {/* Usage Limits Card */}
       <Card className="border-none shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Usage Limits</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center justify-between border-b pb-5">
+          <div 
+            className="flex items-center justify-between border-b pb-5 cursor-pointer"
+            onClick={() => setReelsDialogOpen(true)}
+          >
             <div>
               <h3 className="font-medium">Daily Limit</h3>
               <p className="text-sm text-muted-foreground">Set max reels per day</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-medium">{data.reelsLimit}</span>
+              <span className="font-medium">{data?.reelsLimit || 20}</span>
               <ChevronRight size={18} className="text-muted-foreground" />
             </div>
           </div>
           
-          <div className="flex items-center justify-between border-b pb-5">
+          <div 
+            className="flex items-center justify-between border-b pb-5 cursor-pointer"
+            onClick={() => setTimeDialogOpen(true)}
+          >
             <div>
               <h3 className="font-medium">Time Limit</h3>
               <p className="text-sm text-muted-foreground">Max time watching reels</p>
@@ -221,7 +287,10 @@ export default function Settings() {
             </div>
           </div>
           
-          <div className="flex items-center justify-between">
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setStreakDialogOpen(true)}
+          >
             <div>
               <h3 className="font-medium">Streak Goal</h3>
               <p className="text-sm text-muted-foreground">Set a goal for your streak</p>
@@ -234,21 +303,22 @@ export default function Settings() {
         </CardContent>
       </Card>
       
+      {/* App Features Card */}
       <Card className="border-none shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">App Features</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <ParentalControl 
-            isEnabled={data.parentalControl?.enabled || false}
+            isEnabled={data?.parentalControl?.enabled || false}
             onToggle={handleParentalControlToggle}
           />
           
           <FocusMode 
-            isEnabled={data.focusMode?.enabled || false}
-            startTime={data.focusMode?.startTime || "22:00"}
-            endTime={data.focusMode?.endTime || "06:00"}
-            days={data.focusMode?.days || ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]}
+            isEnabled={data?.focusMode?.enabled || false}
+            startTime={data?.focusMode?.startTime || "22:00"}
+            endTime={data?.focusMode?.endTime || "06:00"}
+            days={data?.focusMode?.days || ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]}
             onUpdate={handleFocusModeUpdate}
           />
           
@@ -308,6 +378,7 @@ export default function Settings() {
         </CardContent>
       </Card>
       
+      {/* About Card */}
       <Card className="border-none shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">About</CardTitle>
@@ -353,6 +424,108 @@ export default function Settings() {
           </Button>
         </div>
       </div>
+      
+      {/* Time Limit Dialog */}
+      <Dialog open={timeDialogOpen} onOpenChange={setTimeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Daily Time Limit</DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="space-y-4">
+              <div className="mb-6">
+                <p className="text-center text-2xl font-bold">{tempTimeLimit[0]} minutes</p>
+              </div>
+              
+              <Slider
+                value={tempTimeLimit}
+                min={5}
+                max={120}
+                step={5}
+                onValueChange={setTempTimeLimit}
+              />
+              
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>5 min</span>
+                <span>60 min</span>
+                <span>120 min</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setTimeDialogOpen(false)} variant="outline">Cancel</Button>
+            <Button onClick={saveTimeLimit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Reels Limit Dialog */}
+      <Dialog open={reelsDialogOpen} onOpenChange={setReelsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Daily Reels Limit</DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="space-y-4">
+              <div className="mb-6">
+                <p className="text-center text-2xl font-bold">{tempReelsLimit[0]} reels</p>
+              </div>
+              
+              <Slider
+                value={tempReelsLimit}
+                min={5}
+                max={100}
+                step={5}
+                onValueChange={setTempReelsLimit}
+              />
+              
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>5</span>
+                <span>50</span>
+                <span>100</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setReelsDialogOpen(false)} variant="outline">Cancel</Button>
+            <Button onClick={saveReelsLimit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Streak Goal Dialog */}
+      <Dialog open={streakDialogOpen} onOpenChange={setStreakDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Streak Goal</DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="space-y-4">
+              <div className="mb-6">
+                <p className="text-center text-2xl font-bold">{tempStreakGoal[0]} days</p>
+              </div>
+              
+              <Slider
+                value={tempStreakGoal}
+                min={1}
+                max={30}
+                step={1}
+                onValueChange={setTempStreakGoal}
+              />
+              
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>1 day</span>
+                <span>15 days</span>
+                <span>30 days</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setStreakDialogOpen(false)} variant="outline">Cancel</Button>
+            <Button onClick={saveStreakGoal}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
