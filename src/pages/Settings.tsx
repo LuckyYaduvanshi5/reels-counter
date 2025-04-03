@@ -10,77 +10,121 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import {
   Moon,
   Save,
-  Shield,
   Clock,
   BellRing,
   RotateCcw,
   ArrowLeft,
   Award,
-  ExternalLink
+  ExternalLink,
+  ChevronRight
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { useLocalStorage } from '@/hooks/use-local-storage';
+import { ParentalControl } from '@/components/settings/ParentalControl';
+import { FocusMode } from '@/components/settings/FocusMode';
 
-type SettingsData = {
+type TrackerData = {
+  reelsWatched: number;
+  timeSpent: number;
   reelsLimit: number;
-  timeLimit: number; // in minutes
-  enableAlerts: boolean;
-  enableVibration: boolean;
-  parentalControl: boolean;
-  focusMode: boolean;
-  streakGoal: number;
+  timeLimit: number;
+  lastUpdated: string;
+  streakDays: number;
+  lastStreak: string;
+  focusMode?: {
+    enabled: boolean;
+    startTime: string;
+    endTime: string;
+    days: string[];
+  };
+  parentalControl?: {
+    enabled: boolean;
+    pin: string;
+  };
+  realData?: {
+    [date: string]: {
+      reelsWatched: number;
+      timeSpent: number;
+    }
+  };
 };
 
-const defaultSettings: SettingsData = {
+const defaultData: TrackerData = {
+  reelsWatched: 0,
+  timeSpent: 0,
   reelsLimit: 20,
-  timeLimit: 30, // 30 minutes
-  enableAlerts: true,
-  enableVibration: true,
-  parentalControl: false,
-  focusMode: false,
-  streakGoal: 7
+  timeLimit: 1800, // 30 minutes in seconds
+  lastUpdated: new Date().toISOString(),
+  streakDays: 0,
+  lastStreak: new Date().toISOString(),
+  focusMode: {
+    enabled: false,
+    startTime: "22:00",
+    endTime: "06:00",
+    days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+  },
+  parentalControl: {
+    enabled: false,
+    pin: "1234"
+  },
+  realData: {
+    [new Date().toISOString().split('T')[0]]: {
+      reelsWatched: 0,
+      timeSpent: 0
+    }
+  }
 };
 
 export default function Settings() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const [settings, setSettings] = useState<SettingsData>(() => {
-    const savedSettings = localStorage.getItem('reels-counter-settings');
-    return savedSettings ? JSON.parse(savedSettings) : defaultSettings;
-  });
-
-  // Load settings
+  const [data, setData] = useLocalStorage<TrackerData>('reels-counter-data', defaultData);
+  const [enableAlerts, setEnableAlerts] = useState(true);
+  const [enableVibration, setEnableVibration] = useState(true);
+  const [streakGoal, setStreakGoal] = useState(7);
+  
   useEffect(() => {
-    const savedData = localStorage.getItem('reels-counter-data');
-    if (savedData) {
-      const { reelsLimit, timeLimit } = JSON.parse(savedData);
-      setSettings(prev => ({
-        ...prev,
-        reelsLimit,
-        timeLimit: timeLimit / 60, // Convert seconds to minutes for UI
-      }));
+    // Set streak goal from localStorage if available
+    const goalFromStorage = localStorage.getItem('reels-counter-streak-goal');
+    if (goalFromStorage) {
+      setStreakGoal(parseInt(goalFromStorage, 10));
     }
-  }, []);
-
-  const handleSaveSettings = () => {
-    // Save settings to localStorage
-    localStorage.setItem('reels-counter-settings', JSON.stringify(settings));
     
-    // Also update the main data
-    const savedData = localStorage.getItem('reels-counter-data');
-    if (savedData) {
-      const data = JSON.parse(savedData);
-      data.reelsLimit = settings.reelsLimit;
-      data.timeLimit = settings.timeLimit * 60; // Convert minutes to seconds
-      localStorage.setItem('reels-counter-data', JSON.stringify(data));
-    }
+    // Load alerts settings
+    const alertsEnabled = localStorage.getItem('reels-counter-alerts') !== 'false';
+    const vibrationEnabled = localStorage.getItem('reels-counter-vibration') !== 'false';
+    setEnableAlerts(alertsEnabled);
+    setEnableVibration(vibrationEnabled);
+  }, []);
+  
+  const handleTimeMinutesChange = (value: number[]) => {
+    // Convert minutes to seconds for storage
+    const timeInSeconds = value[0] * 60;
+    
+    setData(prev => ({
+      ...prev,
+      timeLimit: timeInSeconds
+    }));
+  };
+  
+  const handleReelsLimitChange = (value: number[]) => {
+    setData(prev => ({
+      ...prev,
+      reelsLimit: value[0]
+    }));
+  };
+  
+  const handleSaveSettings = () => {
+    // Save all settings to localStorage
+    localStorage.setItem('reels-counter-alerts', enableAlerts.toString());
+    localStorage.setItem('reels-counter-vibration', enableVibration.toString());
+    localStorage.setItem('reels-counter-streak-goal', streakGoal.toString());
     
     toast({
       title: "Settings Saved",
@@ -94,6 +138,10 @@ export default function Settings() {
       localStorage.removeItem('reels-counter-settings');
       localStorage.removeItem('reels-counter-tracking');
       localStorage.removeItem('reels-counter-interval');
+      localStorage.removeItem('reels-counter-alerts');
+      localStorage.removeItem('reels-counter-vibration');
+      localStorage.removeItem('reels-counter-streak-goal');
+      localStorage.removeItem('reels-counter-pin');
       
       toast({
         title: "All Data Reset",
@@ -104,9 +152,34 @@ export default function Settings() {
       navigate('/', { replace: true });
     }
   };
+  
+  const handleFocusModeUpdate = (settings: {
+    enabled: boolean;
+    startTime: string;
+    endTime: string;
+    days: string[];
+  }) => {
+    setData(prev => ({
+      ...prev,
+      focusMode: settings
+    }));
+  };
+  
+  const handleParentalControlToggle = (enabled: boolean) => {
+    setData(prev => ({
+      ...prev,
+      parentalControl: {
+        ...prev.parentalControl || { pin: "1234" },
+        enabled
+      }
+    }));
+  };
+
+  // Convert seconds to minutes for UI
+  const timeLimitInMinutes = Math.floor(data.timeLimit / 60);
 
   return (
-    <div className="space-y-6 animate-slide-up">
+    <div className="space-y-6 animate-slide-up pb-20">
       <div className="flex items-center justify-between mb-8">
         <Button 
           variant="ghost" 
@@ -120,179 +193,129 @@ export default function Settings() {
         <div className="w-10"></div> {/* Spacer for centering */}
       </div>
       
-      {/* Limits Card */}
-      <Card>
+      {/* Simple Card Design */}
+      <Card className="border-none shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock size={18} /> Limits
-          </CardTitle>
-          <CardDescription>Set your daily usage limits</CardDescription>
+          <CardTitle className="text-lg">Usage Limits</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="reelsLimit">Reels Limit</Label>
-              <span className="text-sm font-medium">{settings.reelsLimit} reels</span>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between border-b pb-5">
+            <div>
+              <h3 className="font-medium">Daily Limit</h3>
+              <p className="text-sm text-muted-foreground">Set max reels per day</p>
             </div>
-            <Slider
-              id="reelsLimit"
-              min={5}
-              max={100}
-              step={5}
-              value={[settings.reelsLimit]}
-              onValueChange={(value) => setSettings({ ...settings, reelsLimit: value[0] })}
-              className="py-2"
-            />
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{data.reelsLimit}</span>
+              <ChevronRight size={18} className="text-muted-foreground" />
+            </div>
           </div>
           
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="timeLimit">Time Limit</Label>
-              <span className="text-sm font-medium">{settings.timeLimit} min</span>
+          <div className="flex items-center justify-between border-b pb-5">
+            <div>
+              <h3 className="font-medium">Time Limit</h3>
+              <p className="text-sm text-muted-foreground">Max time watching reels</p>
             </div>
-            <Slider
-              id="timeLimit"
-              min={5}
-              max={120}
-              step={5}
-              value={[settings.timeLimit]}
-              onValueChange={(value) => setSettings({ ...settings, timeLimit: value[0] })}
-              className="py-2"
-            />
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{timeLimitInMinutes} min</span>
+              <ChevronRight size={18} className="text-muted-foreground" />
+            </div>
           </div>
           
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="streakGoal">Streak Goal</Label>
-              <span className="text-sm font-medium">{settings.streakGoal} days</span>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-medium">Streak Goal</h3>
+              <p className="text-sm text-muted-foreground">Set a goal for your streak</p>
             </div>
-            <Slider
-              id="streakGoal"
-              min={1}
-              max={30}
-              step={1}
-              value={[settings.streakGoal]}
-              onValueChange={(value) => setSettings({ ...settings, streakGoal: value[0] })}
-              className="py-2"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Set a goal for your continuous usage streak
-            </p>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{streakGoal} days</span>
+              <ChevronRight size={18} className="text-muted-foreground" />
+            </div>
           </div>
         </CardContent>
       </Card>
       
-      {/* Alerts Card */}
-      <Card>
+      <Card className="border-none shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BellRing size={18} /> Alerts
-          </CardTitle>
-          <CardDescription>Configure notifications</CardDescription>
+          <CardTitle className="text-lg">App Features</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="enableAlerts">Enable Alerts</Label>
-              <p className="text-sm text-muted-foreground">
-                Show notifications when limits are reached
-              </p>
-            </div>
-            <Switch
-              id="enableAlerts"
-              checked={settings.enableAlerts}
-              onCheckedChange={(checked) => 
-                setSettings({ ...settings, enableAlerts: checked })
-              }
-            />
-          </div>
+          <ParentalControl 
+            isEnabled={data.parentalControl?.enabled || false}
+            onToggle={handleParentalControlToggle}
+          />
           
-          <div className="flex items-center justify-between">
+          <FocusMode 
+            isEnabled={data.focusMode?.enabled || false}
+            startTime={data.focusMode?.startTime || "22:00"}
+            endTime={data.focusMode?.endTime || "06:00"}
+            days={data.focusMode?.days || ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]}
+            onUpdate={handleFocusModeUpdate}
+          />
+          
+          <div className="flex items-center justify-between cursor-pointer p-2 hover:bg-accent/10 rounded-md">
             <div className="space-y-0.5">
-              <Label htmlFor="enableVibration">Vibration</Label>
-              <p className="text-sm text-muted-foreground">
-                Vibrate when alerts are shown
-              </p>
-            </div>
-            <Switch
-              id="enableVibration"
-              checked={settings.enableVibration}
-              onCheckedChange={(checked) => 
-                setSettings({ ...settings, enableVibration: checked })
-              }
-              disabled={!settings.enableAlerts}
-            />
-          </div>
-        </CardContent>
-      </Card>
-      
-      {/* App Settings Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>App Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="darkMode">Dark Mode</Label>
+              <div className="font-medium flex items-center">
+                <Moon size={16} className="mr-2" />
+                Dark Mode
+              </div>
               <p className="text-sm text-muted-foreground">
                 Enable dark mode
               </p>
             </div>
-            <Switch
-              id="darkMode"
-              checked={theme === 'dark'}
-              onCheckedChange={(checked) => 
-                setTheme(checked ? 'dark' : 'light')
-              }
-            />
+            <div 
+              className={`h-6 w-12 rounded-full transition ${theme === 'dark' ? 'bg-primary' : 'bg-muted'} relative flex items-center p-1 cursor-pointer`}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            >
+              <div className={`h-4 w-4 rounded-full bg-white absolute transition-all ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`}></div>
+            </div>
           </div>
           
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between cursor-pointer p-2 hover:bg-accent/10 rounded-md">
             <div className="space-y-0.5">
-              <Label htmlFor="parentalControl">Parental Controls</Label>
+              <div className="font-medium flex items-center">
+                <BellRing size={16} className="mr-2" />
+                Notifications
+              </div>
               <p className="text-sm text-muted-foreground">
-                Lock settings with PIN
+                Show alerts when limits are reached
               </p>
             </div>
-            <Switch
-              id="parentalControl"
-              checked={settings.parentalControl}
-              onCheckedChange={(checked) => 
-                setSettings({ ...settings, parentalControl: checked })
-              }
-            />
+            <div 
+              className={`h-6 w-12 rounded-full transition ${enableAlerts ? 'bg-primary' : 'bg-muted'} relative flex items-center p-1 cursor-pointer`}
+              onClick={() => setEnableAlerts(!enableAlerts)}
+            >
+              <div className={`h-4 w-4 rounded-full bg-white absolute transition-all ${enableAlerts ? 'translate-x-6' : 'translate-x-0'}`}></div>
+            </div>
           </div>
           
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between cursor-pointer p-2 hover:bg-accent/10 rounded-md">
             <div className="space-y-0.5">
-              <Label htmlFor="focusMode">Focus Mode</Label>
+              <div className="font-medium flex items-center">
+                <Award size={16} className="mr-2" />
+                Vibration
+              </div>
               <p className="text-sm text-muted-foreground">
-                Schedule no-reels time
+                Vibrate when alerts are shown
               </p>
             </div>
-            <Switch
-              id="focusMode"
-              checked={settings.focusMode}
-              onCheckedChange={(checked) => 
-                setSettings({ ...settings, focusMode: checked })
-              }
-            />
+            <div 
+              className={`h-6 w-12 rounded-full transition ${enableVibration ? 'bg-primary' : 'bg-muted'} relative flex items-center p-1 cursor-pointer`}
+              onClick={() => setEnableVibration(!enableVibration)}
+            >
+              <div className={`h-4 w-4 rounded-full bg-white absolute transition-all ${enableVibration ? 'translate-x-6' : 'translate-x-0'}`}></div>
+            </div>
           </div>
         </CardContent>
       </Card>
       
-      {/* About Card */}
-      <Card>
+      <Card className="border-none shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Award size={18} /> About
-          </CardTitle>
+          <CardTitle className="text-lg">About</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-center">
             <h3 className="text-lg font-medium">Reels Counter</h3>
-            <p className="text-sm text-muted-foreground mt-1">Version 1.0</p>
+            <p className="text-sm text-muted-foreground mt-1">Version 1.1</p>
             
             <div className="flex flex-col items-center mt-4">
               <p className="text-sm">Developed by</p>
@@ -311,27 +334,25 @@ export default function Settings() {
       </Card>
       
       {/* Action Buttons */}
-      <div className="flex flex-col space-y-3">
-        <Button 
-          onClick={handleSaveSettings}
-          size="lg" 
-          className="reels-gradient w-full text-white"
-        >
-          <Save size={18} className="mr-2" /> Save Settings
-        </Button>
-        
-        <Button 
-          onClick={resetAllData}
-          variant="outline" 
-          className="text-destructive border-destructive/30 hover:bg-destructive/10"
-        >
-          <RotateCcw size={18} className="mr-2" /> Reset All Data
-        </Button>
+      <div className="fixed bottom-20 left-0 right-0 p-4 bg-gradient-to-t from-background to-transparent z-10">
+        <div className="flex flex-col space-y-3 container max-w-md mx-auto">
+          <Button 
+            onClick={handleSaveSettings}
+            size="lg" 
+            className="w-full bg-gradient-to-r from-primary to-primary/70 text-white"
+          >
+            <Save size={18} className="mr-2" /> Save Settings
+          </Button>
+          
+          <Button 
+            onClick={resetAllData}
+            variant="outline" 
+            className="text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <RotateCcw size={18} className="mr-2" /> Reset All Data
+          </Button>
+        </div>
       </div>
-      
-      <p className="text-center text-xs text-muted-foreground mb-20">
-        Reels Counter App v1.0 • Made with ❤️
-      </p>
     </div>
   );
 }

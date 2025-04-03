@@ -10,13 +10,13 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/lovable-uploads/1bba0a93-769e-42c9-be4d-603a33e840e4.png",
+      "src": "/lovable-uploads/a2829abc-bb9e-4d4e-9770-e8d3dd3a43fa.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/lovable-uploads/1bba0a93-769e-42c9-be4d-603a33e840e4.png",
+      "src": "/lovable-uploads/a2829abc-bb9e-4d4e-9770-e8d3dd3a43fa.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -28,14 +28,14 @@
       "short_name": "Track",
       "description": "Start tracking reels",
       "url": "/?action=start-tracking",
-      "icons": [{ "src": "/lovable-uploads/1bba0a93-769e-42c9-be4d-603a33e840e4.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/lovable-uploads/a2829abc-bb9e-4d4e-9770-e8d3dd3a43fa.png", "sizes": "192x192" }]
     },
     {
       "name": "View Reports",
       "short_name": "Reports",
       "description": "View your reels usage reports",
       "url": "/reports",
-      "icons": [{ "src": "/lovable-uploads/1bba0a93-769e-42c9-be4d-603a33e840e4.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/lovable-uploads/a2829abc-bb9e-4d4e-9770-e8d3dd3a43fa.png", "sizes": "192x192" }]
     }
   ]
 }

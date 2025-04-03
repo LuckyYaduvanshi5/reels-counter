@@ -15,7 +15,7 @@ const defaultContext: AutoTrackingContextType = {
   startTracking: () => {},
   stopTracking: () => {},
   setReelInterval: () => {},
-  currentInterval: 30,
+  currentInterval: 10, // Changed to 10 seconds for faster counting
 };
 
 const AutoTrackingContext = createContext<AutoTrackingContextType>(defaultContext);
@@ -29,7 +29,7 @@ type AutoTrackingProviderProps = {
 
 export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingProviderProps) => {
   const [isTracking, setIsTracking] = useState(false);
-  const [currentInterval, setCurrentInterval] = useState(30); // Default 30 seconds
+  const [currentInterval, setCurrentInterval] = useState(10); // Changed to 10 seconds default
   const timerRef = useRef<number | null>(null);
   const { toast } = useToast();
   
@@ -43,9 +43,13 @@ export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingP
     }
     
     if (wasTracking) {
-      // Don't auto-start on page load, but inform the user
+      // Auto-start tracking from previous session
+      setTimeout(() => {
+        startTracking();
+      }, 1000);
+      
       toast({
-        title: "Tracking Status Restored",
+        title: "Tracking Resumed",
         description: "Your previous tracking session has been restored.",
       });
     }
@@ -89,6 +93,12 @@ export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingP
     setIsTracking(true);
     localStorage.setItem('reels-counter-tracking', 'true');
     
+    // Make sure to clear any existing interval first
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    
+    // Set a new interval timer
     timerRef.current = window.setInterval(() => {
       onReelDetected();
     }, currentInterval * 1000);
@@ -96,7 +106,13 @@ export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingP
     toast({
       title: "Auto Tracking Started",
       description: `Counting a new reel every ${currentInterval} seconds.`,
+      variant: "default",
     });
+    
+    // Enable vibration on start if supported
+    if ('vibrate' in navigator) {
+      navigator.vibrate(200);
+    }
     
     // Notify service worker
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -124,6 +140,11 @@ export const AutoTrackingProvider = ({ children, onReelDetected }: AutoTrackingP
       title: "Auto Tracking Stopped",
       description: "You've paused the reels counter.",
     });
+    
+    // Enable vibration on stop if supported
+    if ('vibrate' in navigator) {
+      navigator.vibrate([100, 50, 100]);
+    }
     
     // Notify service worker
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {

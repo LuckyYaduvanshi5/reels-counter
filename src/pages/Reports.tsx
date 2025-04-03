@@ -1,192 +1,272 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
-  BarChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer 
+  BarChart, XAxis, YAxis, CartesianGrid, 
+  Tooltip, ResponsiveContainer, Bar, Cell
 } from 'recharts';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar, Clock } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 type DailyData = {
   date: string;
   reelsWatched: number;
   timeSpent: number; // in seconds
+  day: string;
 };
 
-type WeeklyData = Record<string, DailyData>;
+type TrackerData = {
+  reelsWatched: number;
+  timeSpent: number;
+  reelsLimit: number;
+  timeLimit: number;
+  lastUpdated: string;
+  streakDays: number;
+  lastStreak: string;
+  realData?: {
+    [date: string]: {
+      reelsWatched: number;
+      timeSpent: number;
+    }
+  };
+};
 
 const formatTime = (seconds: number) => {
-  const min = Math.floor(seconds / 60);
-  const sec = seconds % 60;
-  return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
 };
 
-const generateFakeData = () => {
-  const mockData: WeeklyData = {};
-  const today = new Date();
-  
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(today.getDate() - i);
-    const dateString = date.toISOString().split('T')[0];
-    
-    mockData[dateString] = {
-      date: dateString,
-      reelsWatched: Math.floor(Math.random() * 30) + 5,
-      timeSpent: (Math.floor(Math.random() * 40) + 10) * 60, // 10-50 minutes in seconds
-    };
-  }
-
-  // Use today's actual data
-  const todayString = today.toISOString().split('T')[0];
-  const savedData = localStorage.getItem('reels-counter-data');
-  if (savedData) {
-    const parsedData = JSON.parse(savedData);
-    mockData[todayString] = {
-      date: todayString,
-      reelsWatched: parsedData.reelsWatched,
-      timeSpent: parsedData.timeSpent,
-    };
-  }
-  
-  return mockData;
-};
+const dayAbbreviations = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export default function Reports() {
-  const [weeklyData, setWeeklyData] = useState<WeeklyData>({});
+  const navigate = useNavigate();
   const [chartData, setChartData] = useState<DailyData[]>([]);
+  const [totalReels, setTotalReels] = useState(0);
+  const [avgTime, setAvgTime] = useState(0);
+  const [reportPeriod, setReportPeriod] = useState<'daily' | 'weekly'>('daily');
 
   useEffect(() => {
-    // In a real app, this would fetch from backend or IndexedDB
-    // For demo, we'll generate some fake data plus today's real data
-    const data = generateFakeData();
-    setWeeklyData(data);
-    
-    // Convert to array for charts
-    setChartData(Object.values(data).map(day => ({
-      ...day,
-      date: new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
-    })));
-  }, []);
+    // Get real data from localStorage
+    const savedData = localStorage.getItem('reels-counter-data');
+    if (savedData) {
+      const parsedData: TrackerData = JSON.parse(savedData);
+      const realData = parsedData.realData || {};
+      
+      // Process the data for charts
+      processData(realData);
+    } else {
+      // Fallback to generate data if not found
+      generateDemoData();
+    }
+  }, [reportPeriod]);
 
-  // Calculate averages
-  const calculateAverages = () => {
-    const days = Object.values(weeklyData);
-    if (days.length === 0) return { avgReels: 0, avgTime: 0 };
+  const processData = (realData: Record<string, { reelsWatched: number, timeSpent: number }>) => {
+    const today = new Date();
+    const chartDataArray: DailyData[] = [];
     
-    const totalReels = days.reduce((sum, day) => sum + day.reelsWatched, 0);
-    const totalTime = days.reduce((sum, day) => sum + day.timeSpent, 0);
+    // Calculate totals
+    let totalReelsCount = 0;
+    let totalTimeSpent = 0;
+    let daysWithData = 0;
     
-    return {
-      avgReels: Math.round(totalReels / days.length),
-      avgTime: Math.round(totalTime / days.length),
-    };
+    // Process last 7 days for weekly report
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(today.getDate() - i);
+      const dateString = date.toISOString().split('T')[0];
+      const dayOfWeek = date.getDay(); // 0-6 (Sunday-Saturday)
+      
+      const dayData = realData[dateString] || { reelsWatched: 0, timeSpent: 0 };
+      
+      if (dayData.reelsWatched > 0) {
+        totalReelsCount += dayData.reelsWatched;
+        totalTimeSpent += dayData.timeSpent;
+        daysWithData++;
+      }
+      
+      chartDataArray.push({
+        date: dateString,
+        day: dayAbbreviations[dayOfWeek],
+        reelsWatched: dayData.reelsWatched,
+        timeSpent: dayData.timeSpent
+      });
+    }
+    
+    setChartData(chartDataArray);
+    setTotalReels(totalReelsCount);
+    setAvgTime(daysWithData > 0 ? Math.round(totalTimeSpent / daysWithData) : 0);
   };
 
-  const { avgReels, avgTime } = calculateAverages();
+  const generateDemoData = () => {
+    const today = new Date();
+    const chartDataArray: DailyData[] = [];
+    
+    let totalReelsCount = 0;
+    let totalTimeSpent = 0;
+    
+    // Generate last 7 days of data
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(today.getDate() - i);
+      const dateString = date.toISOString().split('T')[0];
+      const dayOfWeek = date.getDay(); // 0-6 (Sunday-Saturday)
+      
+      // Generate random data
+      const reelsWatched = Math.floor(Math.random() * 30) + 5;
+      const timeSpent = (Math.floor(Math.random() * 60) + 15) * 60; // 15-75 minutes in seconds
+      
+      totalReelsCount += reelsWatched;
+      totalTimeSpent += timeSpent;
+      
+      chartDataArray.push({
+        date: dateString,
+        day: dayAbbreviations[dayOfWeek],
+        reelsWatched,
+        timeSpent
+      });
+    }
+    
+    // Use today's actual data if available
+    const savedData = localStorage.getItem('reels-counter-data');
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      const todayIndex = chartDataArray.length - 1;
+      
+      chartDataArray[todayIndex].reelsWatched = parsedData.reelsWatched;
+      chartDataArray[todayIndex].timeSpent = parsedData.timeSpent;
+    }
+    
+    setChartData(chartDataArray);
+    setTotalReels(totalReelsCount);
+    setAvgTime(Math.round(totalTimeSpent / 7));
+  };
+
+  // Custom tooltip for bar chart
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-background border border-border p-2 rounded-md shadow-md">
+          <p className="text-sm font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground">{`Reels: ${payload[0].value}`}</p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-6 animate-slide-up">
-      <h1 className="text-3xl font-bold text-center mb-8 mt-2">Reports</h1>
+      <div className="flex items-center justify-between mb-4">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="flex items-center" 
+          onClick={() => navigate(-1)}
+        >
+          <ArrowLeft size={16} className="mr-1" /> Back
+        </Button>
+        <h1 className="text-2xl font-bold">Reports</h1>
+        <div className="w-10"></div> {/* Spacer for centering */}
+      </div>
       
-      {/* Statistics Summary Card */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="text-lg">Weekly Summary</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
+      <Tabs defaultValue="daily" className="w-full" onValueChange={(value) => setReportPeriod(value as 'daily' | 'weekly')}>
+        <TabsList className="grid grid-cols-2 mb-4">
+          <TabsTrigger value="daily">Daily</TabsTrigger>
+          <TabsTrigger value="weekly">Weekly</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="daily" className="space-y-4">
+          {/* Chart */}
+          <Card className="border-none shadow-sm overflow-hidden">
+            <CardContent className="p-0 h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 20, right: 20, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                  <XAxis dataKey="day" />
+                  <YAxis />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="reelsWatched" fill="#4f46e5" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={index === chartData.length - 1 ? '#6366f1' : '#d1d5db'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          
+          {/* Stats Summary */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col items-center">
-              <div className="flex items-center text-primary mb-1">
-                <Calendar size={16} className="mr-1" />
-                <span className="text-sm font-medium">Avg. Reels</span>
-              </div>
-              <p className="text-2xl font-bold">{avgReels}</p>
-              <p className="text-xs text-muted-foreground">per day</p>
-            </div>
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-4 text-center">
+                <h3 className="text-sm font-medium text-muted-foreground mb-1">Average Time</h3>
+                <p className="text-2xl font-bold">{formatTime(avgTime)}</p>
+              </CardContent>
+            </Card>
             
-            <div className="flex flex-col items-center">
-              <div className="flex items-center text-secondary mb-1">
-                <Clock size={16} className="mr-1" />
-                <span className="text-sm font-medium">Avg. Time</span>
-              </div>
-              <p className="text-2xl font-bold">{formatTime(avgTime)}</p>
-              <p className="text-xs text-muted-foreground">per day</p>
-            </div>
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-4 text-center">
+                <h3 className="text-sm font-medium text-muted-foreground mb-1">Total Reels</h3>
+                <p className="text-2xl font-bold">{totalReels}</p>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
-      
-      {/* Charts Card */}
-      <Card className="glass-card">
-        <CardHeader>
-          <Tabs defaultValue="reels">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="reels">Reels Watched</TabsTrigger>
-              <TabsTrigger value="time">Time Spent</TabsTrigger>
-            </TabsList>
+        </TabsContent>
+        
+        <TabsContent value="weekly" className="space-y-4">
+          {/* Charts - Weekly Summary */}
+          <Card className="border-none shadow-sm overflow-hidden">
+            <CardContent className="p-0 h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 20, right: 20, left: 10, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                  <XAxis dataKey="day" />
+                  <YAxis />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="reelsWatched" fill="#4f46e5" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={index === 6 ? '#6366f1' : '#d1d5db'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          
+          {/* Weekly Stats */}
+          <div className="grid grid-cols-2 gap-4">
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-4 text-center">
+                <h3 className="text-sm font-medium text-muted-foreground mb-1">Weekly Average</h3>
+                <p className="text-2xl font-bold">{formatTime(avgTime)}</p>
+              </CardContent>
+            </Card>
             
-            <TabsContent value="reels" className="pt-4">
-              <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chartData}
-                    margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip
-                      formatter={(value) => [`${value} reels`, 'Watched']}
-                      labelFormatter={(label) => `Day: ${label}`}
-                    />
-                    <Bar 
-                      dataKey="reelsWatched" 
-                      name="Reels Watched" 
-                      fill="#7E57C2" 
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </TabsContent>
-            
-            <TabsContent value="time" className="pt-4">
-              <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={chartData}
-                    margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" />
-                    <YAxis 
-                      tickFormatter={(seconds) => `${Math.floor(seconds / 60)}m`} 
-                    />
-                    <Tooltip
-                      formatter={(value) => [formatTime(value as number), 'Time']}
-                      labelFormatter={(label) => `Day: ${label}`}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="timeSpent" 
-                      name="Time Spent" 
-                      stroke="#26A69A" 
-                      strokeWidth={2}
-                      dot={{ stroke: '#26A69A', strokeWidth: 2, r: 4 }}
-                      activeDot={{ stroke: '#26A69A', strokeWidth: 2, r: 6 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </CardHeader>
-      </Card>
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-4 text-center">
+                <h3 className="text-sm font-medium text-muted-foreground mb-1">Weekly Total</h3>
+                <p className="text-2xl font-bold">{totalReels}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
       
-      <p className="text-center text-sm text-muted-foreground">
-        Reports are only available for the last 7 days in this version.
+      <p className="text-center text-xs text-muted-foreground fixed bottom-20 left-0 right-0">
+        Developed by Lucky Yaduvanshi • <a href="https://miniai.online" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">miniai.online</a>
       </p>
     </div>
   );

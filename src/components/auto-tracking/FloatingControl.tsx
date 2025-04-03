@@ -1,14 +1,36 @@
 
 import React from 'react';
 import { useAutoTracking } from './AutoTrackingProvider';
-import { Play, Pause, Timer, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, Timer, ChevronUp, ChevronDown, Lock } from 'lucide-react';
 import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ui/drawer';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
 
-export const FloatingControl = () => {
+type FloatingControlProps = {
+  disabled?: boolean;
+};
+
+export const FloatingControl = ({ disabled = false }: FloatingControlProps) => {
   const { isTracking, startTracking, stopTracking, setReelInterval, currentInterval } = useAutoTracking();
   const [isExpanded, setIsExpanded] = React.useState(false);
+  
+  const handleToggleTracking = () => {
+    if (disabled) {
+      toast({
+        title: "Focus Mode Active",
+        description: "Tracking is disabled during focus hours.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (isTracking) {
+      stopTracking();
+    } else {
+      startTracking();
+    }
+  };
   
   return (
     <div className="fixed bottom-20 right-4 z-50">
@@ -25,7 +47,12 @@ export const FloatingControl = () => {
               
               <Drawer>
                 <DrawerTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    disabled={disabled}
+                  >
                     Adjust Interval
                   </Button>
                 </DrawerTrigger>
@@ -46,16 +73,18 @@ export const FloatingControl = () => {
                           max={60} 
                           step={5}
                           onValueChange={(values) => setReelInterval(values[0])}
+                          disabled={disabled}
                         />
                       </div>
                       
                       <div className="grid grid-cols-3 gap-2">
-                        {[10, 20, 30].map(seconds => (
+                        {[5, 10, 30].map(seconds => (
                           <Button 
                             key={seconds}
                             variant={currentInterval === seconds ? "default" : "outline"}
                             size="sm"
                             onClick={() => setReelInterval(seconds)}
+                            disabled={disabled}
                           >
                             {seconds}s
                           </Button>
@@ -69,8 +98,9 @@ export const FloatingControl = () => {
               <Button
                 variant={isTracking ? "destructive" : "default"}
                 className={isTracking ? "" : "teal-gradient text-white"}
-                onClick={isTracking ? stopTracking : startTracking}
+                onClick={handleToggleTracking}
                 size="sm"
+                disabled={disabled}
               >
                 {isTracking ? (
                   <><Pause size={16} className="mr-2" /> Stop Tracking</>
@@ -84,10 +114,15 @@ export const FloatingControl = () => {
         
         <Button
           size="icon"
-          className={`rounded-full h-12 w-12 shadow-lg ${isTracking ? 'bg-destructive hover:bg-destructive/90' : 'reels-gradient'}`}
-          onClick={() => setIsExpanded(!isExpanded)}
+          className={`rounded-full h-12 w-12 shadow-lg ${
+            disabled ? 'bg-muted text-muted-foreground' : 
+            isTracking ? 'bg-destructive hover:bg-destructive/90' : 'reels-gradient'
+          }`}
+          onClick={() => disabled ? null : setIsExpanded(!isExpanded)}
         >
-          {isExpanded ? (
+          {disabled ? (
+            <Lock size={24} />
+          ) : isExpanded ? (
             <ChevronDown size={24} />
           ) : (
             isTracking ? <Pause size={24} /> : <Play size={24} />

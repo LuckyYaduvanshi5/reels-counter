@@ -1,37 +1,43 @@
 
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Play, Pause, Plus, ArrowDown, RotateCcw, Timer,
-  AlertCircle, Settings as SettingsIcon, TrendingUp, Award
-} from 'lucide-react';
-import { 
-  Card, CardContent 
-} from '@/components/ui/card';
+import { Play, Pause, Plus, Settings, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { useAutoTracking } from '@/components/auto-tracking/AutoTrackingProvider';
 
 type TrackerData = {
   reelsWatched: number;
-  timeSpent: number; // in seconds
+  timeSpent: number;
   reelsLimit: number;
-  timeLimit: number; // in seconds
+  timeLimit: number;
   lastUpdated: string;
   streakDays: number;
   lastStreak: string;
+  realData?: {
+    [date: string]: {
+      reelsWatched: number;
+      timeSpent: number;
+    }
+  };
 };
 
 const defaultData: TrackerData = {
   reelsWatched: 0,
   timeSpent: 0,
   reelsLimit: 20,
-  timeLimit: 1800, // 30 minutes in seconds
+  timeLimit: 1800,
   lastUpdated: new Date().toISOString(),
   streakDays: 0,
-  lastStreak: new Date().toISOString()
+  lastStreak: new Date().toISOString(),
+  realData: {
+    [new Date().toISOString().split('T')[0]]: {
+      reelsWatched: 0,
+      timeSpent: 0
+    }
+  }
 };
 
 export default function Home() {
@@ -42,14 +48,15 @@ export default function Home() {
 
   // Format time helper
   const formatTime = (seconds: number) => {
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-    return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
   };
-
-  // Calculate progress
-  const reelsProgress = Math.min((data.reelsWatched / data.reelsLimit) * 100, 100);
-  const timeProgress = Math.min((data.timeSpent / data.timeLimit) * 100, 100);
 
   // Check if service worker sent any updates while app was closed
   useEffect(() => {
@@ -76,11 +83,22 @@ export default function Home() {
     }
   }, [isTracking, startTracking]);
 
-  // Handlers
+  // Handle adding a reel manually
   const handleReelUpdate = () => {
     setData(prev => {
       const newReelsCount = prev.reelsWatched + 1;
-      const newTimeSpent = prev.timeSpent + 1;
+      const newTimeSpent = prev.timeSpent + 10; // Add 10 seconds per reel
+      
+      // Update the real data for today
+      const todayISO = new Date().toISOString().split('T')[0];
+      const updatedRealData = { ...prev.realData || {} };
+      
+      if (!updatedRealData[todayISO]) {
+        updatedRealData[todayISO] = { reelsWatched: 0, timeSpent: 0 };
+      }
+      
+      updatedRealData[todayISO].reelsWatched += 1;
+      updatedRealData[todayISO].timeSpent += 10;
       
       // Only show a toast notification for important milestones
       if (newReelsCount === prev.reelsLimit || 
@@ -98,14 +116,12 @@ export default function Home() {
         reelsWatched: newReelsCount,
         timeSpent: newTimeSpent,
         lastUpdated: new Date().toISOString(),
+        realData: updatedRealData
       };
     });
   };
 
-  const increaseReels = () => {
-    handleReelUpdate();
-  };
-
+  // Toggle tracking
   const toggleTracking = () => {
     if (isTracking) {
       stopTracking();
@@ -114,111 +130,54 @@ export default function Home() {
     }
   };
 
-  const resetData = () => {
-    if (window.confirm("Are you sure you want to reset your tracking data for today?")) {
-      setData({
-        ...data,
-        reelsWatched: 0,
-        timeSpent: 0,
-        lastUpdated: new Date().toISOString(),
-      });
-      
-      toast({
-        title: "Data Reset",
-        description: "Your tracking data has been reset.",
-      });
-      
-      // Also stop tracking if it's active
-      if (isTracking) {
-        stopTracking();
-      }
-    }
+  // Manual counter
+  const increaseReels = () => {
+    handleReelUpdate();
   };
 
   return (
-    <div className="space-y-6 animate-slide-up">
-      <h1 className="text-3xl font-bold text-center mb-4 mt-2">Dashboard</h1>
+    <div className="h-full flex flex-col">
+      <h1 className="text-2xl font-bold text-center mb-6 mt-2">Reels Counter</h1>
       
-      {/* Streak Card */}
-      <Card className="glass-card overflow-hidden border-cyan-300/30 shadow-cyan-200/10">
-        <CardContent className="p-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="bg-cyan-400/10 p-2 rounded-full mr-3">
-              <Award size={20} className="text-cyan-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">Current Streak</h3>
-              <p className="text-2xl font-bold">{data.streakDays} day{data.streakDays !== 1 ? 's' : ''}</p>
-            </div>
-          </div>
-          
-          <div className="flex flex-col items-end">
-            <p className="text-xs text-muted-foreground mb-1">Today's Trend</p>
-            <div className="flex items-center text-cyan-400">
-              <TrendingUp size={14} className="mr-1" />
-              <span className="text-sm font-medium">
-                {Math.max(0, data.reelsWatched - 10)} above avg
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Main Counter Cards */}
+      <div className="grid gap-4">
+        <Card className="border-none shadow-sm">
+          <CardContent className="p-6">
+            <h2 className="text-lg font-medium text-center mb-2">Total Reels Watched</h2>
+            <p className="text-6xl font-bold text-center mb-2">{data.reelsWatched}</p>
+            <p className="text-xs text-center text-muted-foreground">
+              Daily Limit: {data.reelsLimit} reels
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-none shadow-sm">
+          <CardContent className="p-6">
+            <h2 className="text-lg font-medium text-center mb-2">Time Spent</h2>
+            <p className="text-5xl font-bold text-center mb-2">{formatTime(data.timeSpent)}</p>
+            <p className="text-xs text-center text-muted-foreground">
+              Daily Limit: {formatTime(data.timeLimit)}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
       
-      {/* Auto-tracking notification */}
+      {/* Tracking Status */}
       {isTracking && (
-        <div className="bg-secondary/10 border border-secondary/30 rounded-lg p-3 mb-2 animate-pulse flex items-center">
-          <AlertCircle size={18} className="text-secondary mr-2" />
-          <p className="text-sm">
-            <span className="font-medium">Auto-tracking active:</span> Counting reels automatically.
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 my-4 animate-pulse flex items-center justify-center">
+          <p className="text-sm font-medium text-primary">
+            Auto-tracking active • Counting reels
           </p>
         </div>
       )}
       
-      {/* Main Counter Card */}
-      <Card className="glass-card overflow-hidden border-primary/30 shadow-lg">
-        <div className="bg-gradient-to-r from-primary/5 to-secondary/5 p-1"></div>
-        <CardContent className="p-6 space-y-4">
-          <div className="text-center space-y-2">
-            <h2 className="text-lg font-medium text-muted-foreground">Reels Watched Today</h2>
-            <div className="text-6xl font-bold bg-gradient-to-br from-primary to-primary/70 bg-clip-text text-transparent">
-              {data.reelsWatched}
-            </div>
-            <Progress value={reelsProgress} className="h-2 mt-2" />
-            <p className="text-sm text-muted-foreground flex items-center justify-center">
-              <span className="font-medium text-primary mr-1">{data.reelsWatched}</span> of 
-              <span className="font-medium ml-1">{data.reelsLimit}</span> reels
-              {reelsProgress >= 100 && (
-                <span className="ml-2 text-destructive">Limit reached!</span>
-              )}
-            </p>
-          </div>
-
-          <div className="text-center space-y-2 mt-6">
-            <h2 className="text-lg font-medium text-muted-foreground flex items-center justify-center gap-1">
-              <Timer size={16} /> Time Spent
-            </h2>
-            <div className="text-4xl font-bold bg-gradient-to-br from-secondary to-secondary/70 bg-clip-text text-transparent">
-              {formatTime(data.timeSpent)}
-            </div>
-            <Progress value={timeProgress} className="h-2 mt-2" />
-            <p className="text-sm text-muted-foreground flex items-center justify-center">
-              <span className="font-medium text-secondary mr-1">{formatTime(data.timeSpent)}</span> of
-              <span className="font-medium ml-1">{formatTime(data.timeLimit)}</span>
-              {timeProgress >= 100 && (
-                <span className="ml-2 text-destructive">Limit reached!</span>
-              )}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 mt-6">
         <Button 
           onClick={increaseReels}
           size="lg" 
           variant="default"
-          className="reels-gradient text-white py-6 shadow-md"
+          className="py-6 bg-gradient-to-r from-primary to-primary/70 text-white shadow-sm"
         >
           <Plus size={20} className="mr-2" /> Add Reel
         </Button>
@@ -227,45 +186,37 @@ export default function Home() {
           onClick={toggleTracking}
           size="lg" 
           variant={isTracking ? "destructive" : "secondary"}
-          className={isTracking ? "" : "teal-gradient text-white py-6 shadow-md"}
+          className={isTracking ? "" : "bg-gradient-to-r from-teal-400 to-teal-500 text-white py-6 shadow-sm"}
         >
           {isTracking ? (
-            <><Pause size={20} className="mr-2" /> Stop Tracking</>
+            <><Pause size={20} className="mr-2" /> Stop</>
           ) : (
-            <><Play size={20} className="mr-2" /> Auto Track</>
+            <><Play size={20} className="mr-2" /> Track</>
           )}
         </Button>
       </div>
-
-      {/* Settings & Reports Links */}
-      <div className="flex justify-between mt-4">
+      
+      {/* Navigation Buttons */}
+      <div className="grid grid-cols-2 gap-4 mt-4">
         <Button
           onClick={() => navigate('/reports')}
           variant="outline"
-          className="flex items-center"
+          className="flex-1 flex items-center justify-center py-6"
         >
-          <ArrowDown size={18} className="mr-2" /> View Reports
+          <BarChart3 size={20} className="mr-2" /> Reports
         </Button>
         
         <Button
           onClick={() => navigate('/settings')}
           variant="outline"
-          className="flex items-center"
+          className="flex-1 flex items-center justify-center py-6"
         >
-          <SettingsIcon size={18} className="mr-2" /> Settings
-        </Button>
-        
-        <Button
-          onClick={resetData}
-          variant="outline"
-          className="text-destructive border-destructive/30 hover:bg-destructive/10"
-        >
-          <RotateCcw size={18} className="mr-2" /> Reset
+          <Settings size={20} className="mr-2" /> Settings
         </Button>
       </div>
       
       {/* Developer Credit */}
-      <p className="text-center text-xs text-muted-foreground pt-4">
+      <p className="text-center text-xs text-muted-foreground mt-auto pt-8 pb-6">
         Developed by Lucky Yaduvanshi<br />
         <a href="https://miniai.online" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
           miniai.online
