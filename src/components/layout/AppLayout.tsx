@@ -69,13 +69,19 @@ export const AppLayout = () => {
   // Check if focus mode is active
   useEffect(() => {
     const checkFocusMode = () => {
+      // Make sure data and focusMode exist before accessing properties
+      if (!data || !data.focusMode || data.focusMode.enabled === undefined) {
+        setFocusModeActive(false);
+        return;
+      }
+      
       if (!data.focusMode.enabled) {
         setFocusModeActive(false);
         return;
       }
       
       const now = new Date();
-      const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'lowercase' });
+      const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
       
       // Check if today is a focus day
       if (!data.focusMode.days.includes(dayOfWeek)) {
@@ -106,10 +112,12 @@ export const AppLayout = () => {
     // Check focus mode every minute
     const interval = setInterval(checkFocusMode, 60000);
     return () => clearInterval(interval);
-  }, [data.focusMode]);
+  }, [data]);
   
   // Check for day change and reset data if needed
   useEffect(() => {
+    if (!data) return; // Add safety check
+    
     const lastDate = new Date(data.lastUpdated).toDateString();
     const today = new Date().toDateString();
     const todayISO = new Date().toISOString().split('T')[0];
@@ -155,11 +163,15 @@ export const AppLayout = () => {
       return;
     }
     
+    if (!data) return; // Add safety check
+    
     const todayISO = new Date().toISOString().split('T')[0];
     
     setData(prev => {
+      if (!prev) return defaultData; // Safety check
+      
       const newReelsCount = prev.reelsWatched + 1;
-      const newTimeSpent = prev.timeSpent + prev.realData[todayISO] ? 10 : 10; // 10 seconds per reel
+      const newTimeSpent = prev.timeSpent + 10; // 10 seconds per reel
       
       // Update the real data for today
       const updatedRealData = { ...prev.realData };
@@ -211,7 +223,7 @@ export const AppLayout = () => {
     <AutoTrackingProvider onReelDetected={handleReelDetected}>
       <div className="flex flex-col min-h-screen bg-gradient-to-b from-background to-accent/20 dark:from-background dark:to-muted/20">
         <Navbar />
-        <StatusBar reelsWatched={data.reelsWatched} reelsLimit={data.reelsLimit} />
+        <StatusBar reelsWatched={data?.reelsWatched || 0} reelsLimit={data?.reelsLimit || 20} />
         
         {focusModeActive && (
           <div className="bg-destructive/20 text-destructive font-medium text-center py-2 px-4 text-sm">
