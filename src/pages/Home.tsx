@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Play, Pause, Plus, ArrowDown, RotateCcw, Timer
+  Play, Pause, Plus, ArrowDown, RotateCcw, Timer,
+  AlertCircle, Settings as SettingsIcon
 } from 'lucide-react';
 import { 
   Card, CardContent 
@@ -10,11 +11,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import { useLocalStorage } from '@/hooks/use-local-storage';
+import { useAutoTracking } from '@/components/auto-tracking/AutoTrackingProvider';
 
 type TrackerData = {
   reelsWatched: number;
   timeSpent: number; // in seconds
-  isTracking: boolean;
   reelsLimit: number;
   timeLimit: number; // in seconds
   lastUpdated: string;
@@ -23,7 +25,6 @@ type TrackerData = {
 const defaultData: TrackerData = {
   reelsWatched: 0,
   timeSpent: 0,
-  isTracking: false,
   reelsLimit: 20,
   timeLimit: 1800, // 30 minutes in seconds
   lastUpdated: new Date().toISOString(),
@@ -32,11 +33,8 @@ const defaultData: TrackerData = {
 export default function Home() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [data, setData] = useState<TrackerData>(() => {
-    const savedData = localStorage.getItem('reels-counter-data');
-    return savedData ? JSON.parse(savedData) : defaultData;
-  });
-  const [intervalId, setIntervalId] = useState<number | null>(null);
+  const [data, setData] = useLocalStorage<TrackerData>('reels-counter-data', defaultData);
+  const { isTracking, startTracking, stopTracking } = useAutoTracking();
 
   // Format time helper
   const formatTime = (seconds: number) => {
@@ -49,47 +47,8 @@ export default function Home() {
   const reelsProgress = Math.min((data.reelsWatched / data.reelsLimit) * 100, 100);
   const timeProgress = Math.min((data.timeSpent / data.timeLimit) * 100, 100);
 
-  // Effect to save data
-  useEffect(() => {
-    localStorage.setItem('reels-counter-data', JSON.stringify({
-      ...data,
-      lastUpdated: new Date().toISOString(),
-    }));
-  }, [data]);
-
-  // Timer effect
-  useEffect(() => {
-    if (data.isTracking) {
-      const interval = window.setInterval(() => {
-        setData(prev => {
-          const newTimeSpent = prev.timeSpent + 1;
-          
-          // Check if limits are reached
-          if (newTimeSpent === prev.timeLimit) {
-            toast({
-              title: "Time Limit Reached!",
-              description: `You've spent ${formatTime(prev.timeLimit)} on reels today.`,
-              variant: "destructive",
-            });
-          }
-          
-          return {
-            ...prev,
-            timeSpent: newTimeSpent,
-          };
-        });
-      }, 1000);
-      
-      setIntervalId(interval);
-      return () => clearInterval(interval);
-    } else if (intervalId) {
-      clearInterval(intervalId);
-      setIntervalId(null);
-    }
-  }, [data.isTracking, toast, data.timeLimit]);
-
-  // Check daily reset
-  useEffect(() => {
+  // Effect to check daily reset
+  React.useEffect(() => {
     const lastDate = new Date(data.lastUpdated).toDateString();
     const today = new Date().toDateString();
     
@@ -106,15 +65,16 @@ export default function Home() {
         description: "Your tracking stats have been reset for today.",
       });
     }
-  }, [data, toast]);
+  }, [data, toast, setData]);
 
   // Handlers
   const increaseReels = () => {
     const newCount = data.reelsWatched + 1;
-    setData(prev => ({
-      ...prev,
+    setData({
+      ...data,
       reelsWatched: newCount,
-    }));
+      lastUpdated: new Date().toISOString(),
+    });
     
     // Show warning if limit is reached
     if (newCount === data.reelsLimit) {
@@ -127,10 +87,11 @@ export default function Home() {
   };
 
   const toggleTracking = () => {
-    setData(prev => ({
-      ...prev, 
-      isTracking: !prev.isTracking
-    }));
+    if (isTracking) {
+      stopTracking();
+    } else {
+      startTracking();
+    }
   };
 
   const resetData = () => {
@@ -139,19 +100,34 @@ export default function Home() {
         ...data,
         reelsWatched: 0,
         timeSpent: 0,
-        isTracking: false,
+        lastUpdated: new Date().toISOString(),
       });
       
       toast({
         title: "Data Reset",
         description: "Your tracking data has been reset.",
       });
+      
+      // Also stop tracking if it's active
+      if (isTracking) {
+        stopTracking();
+      }
     }
   };
 
   return (
     <div className="space-y-6 animate-slide-up">
       <h1 className="text-3xl font-bold text-center mb-8 mt-2">Dashboard</h1>
+      
+      {/* Auto-tracking notification */}
+      {isTracking && (
+        <div className="bg-secondary/10 border border-secondary/30 rounded-lg p-3 mb-6 animate-pulse flex items-center">
+          <AlertCircle size={18} className="text-secondary mr-2" />
+          <p className="text-sm">
+            <span className="font-medium">Auto-tracking active:</span> Counting reels automatically.
+          </p>
+        </div>
+      )}
       
       {/* Main Counter Card */}
       <Card className="glass-card overflow-hidden">
@@ -196,13 +172,13 @@ export default function Home() {
         <Button 
           onClick={toggleTracking}
           size="lg" 
-          variant={data.isTracking ? "destructive" : "secondary"}
-          className={data.isTracking ? "" : "teal-gradient text-white py-6"}
+          variant={isTracking ? "destructive" : "secondary"}
+          className={isTracking ? "" : "teal-gradient text-white py-6"}
         >
-          {data.isTracking ? (
-            <><Pause size={20} className="mr-2" /> Pause</>
+          {isTracking ? (
+            <><Pause size={20} className="mr-2" /> Stop Tracking</>
           ) : (
-            <><Play size={20} className="mr-2" /> Track Time</>
+            <><Play size={20} className="mr-2" /> Auto Track</>
           )}
         </Button>
       </div>
@@ -215,6 +191,14 @@ export default function Home() {
           className="flex items-center"
         >
           <ArrowDown size={18} className="mr-2" /> View Reports
+        </Button>
+        
+        <Button
+          onClick={() => navigate('/settings')}
+          variant="outline"
+          className="flex items-center"
+        >
+          <SettingsIcon size={18} className="mr-2" /> Settings
         </Button>
         
         <Button
